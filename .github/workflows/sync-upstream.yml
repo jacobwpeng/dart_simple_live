@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  workflows: write
 
 concurrency:
   group: sync-upstream-master
@@ -33,7 +32,18 @@ jobs:
           git remote add upstream "https://github.com/xiaoyaocz/dart_simple_live.git" || \
             git remote set-url upstream "https://github.com/xiaoyaocz/dart_simple_live.git"
           git fetch upstream master
-          git merge --no-edit -X theirs upstream/master
+          if ! git merge --no-ff --no-commit -X theirs upstream/master; then
+            echo "Merge failed. Manual intervention required."
+            git merge --abort || true
+            exit 1
+          fi
+          git restore --source=HEAD --staged --worktree .github/workflows || true
+          if git diff --cached --quiet; then
+            echo "No upstream changes to commit."
+            git merge --abort || true
+            exit 0
+          fi
+          git commit -m "chore: sync upstream/master"
 
       - name: Push merged changes
         run: |
