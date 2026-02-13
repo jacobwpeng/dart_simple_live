@@ -21,36 +21,37 @@ jobs:
           ref: dev
 
       # APK签名设置
-      - name: Download Android keystore
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
-        id: android_keystore
-        uses: timheuer/base64-to-file@v1.2
-        with:
-          fileName: keystore.jks
-          encodedString: ${{ secrets.KEYSTORE_BASE64 }}
-      - name: Create key.properties from secrets
-        if: ${{ secrets.KEYSTORE_BASE64 != '' && secrets.STORE_PASSWORD != '' && secrets.KEY_PASSWORD != '' && secrets.KEY_ALIAS != '' }}
+      - name: Prepare Android signing config
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
-          echo "storeFile=${{ steps.android_keystore.outputs.filePath }}" > simple_live_app/android/key.properties
-          echo "storePassword=${{ secrets.STORE_PASSWORD }}" >> simple_live_app/android/key.properties
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> simple_live_app/android/key.properties
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> simple_live_app/android/key.properties
-      - name: Create debug key.properties fallback
-        if: ${{ secrets.KEYSTORE_BASE64 == '' || secrets.STORE_PASSWORD == '' || secrets.KEY_PASSWORD == '' || secrets.KEY_ALIAS == '' }}
-        run: |
-          echo "Signing secrets not fully configured; using debug keystore fallback."
-          mkdir -p "$HOME/.android"
-          if [ ! -f "$HOME/.android/debug.keystore" ]; then
-            keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" \
-              -storepass android -alias androiddebugkey -keypass android \
-              -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_PASSWORD" ] && [ -n "$KEY_ALIAS" ]; then
+            echo "Using signing secrets."
+            python3 -c 'import base64, os, pathlib; pathlib.Path(os.environ["RUNNER_TEMP"], "keystore.jks").write_bytes(base64.b64decode(os.environ["KEYSTORE_BASE64"]))'
+            {
+              echo "storeFile=$RUNNER_TEMP/keystore.jks"
+              echo "storePassword=$STORE_PASSWORD"
+              echo "keyPassword=$KEY_PASSWORD"
+              echo "keyAlias=$KEY_ALIAS"
+            } > simple_live_app/android/key.properties
+          else
+            echo "Signing secrets not fully configured; using debug keystore fallback."
+            mkdir -p "$HOME/.android"
+            if [ ! -f "$HOME/.android/debug.keystore" ]; then
+              keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" \
+                -storepass android -alias androiddebugkey -keypass android \
+                -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            fi
+            {
+              echo "storeFile=$HOME/.android/debug.keystore"
+              echo "storePassword=android"
+              echo "keyAlias=androiddebugkey"
+              echo "keyPassword=android"
+            } > simple_live_app/android/key.properties
           fi
-          cat > simple_live_app/android/key.properties <<EOF
-          storeFile=$HOME/.android/debug.keystore
-          storePassword=android
-          keyAlias=androiddebugkey
-          keyPassword=android
-          EOF
 
       # 设置JAVA环境
       - uses: actions/setup-java@v4
