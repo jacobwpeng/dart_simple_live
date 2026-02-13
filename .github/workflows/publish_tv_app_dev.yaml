@@ -17,17 +17,35 @@ jobs:
 
             #APK签名设置
             - name: Download Android keystore
+              if: ${{ secrets.TV_KEYSTORE_BASE64 != '' }}
               id: android_tv_keystore
               uses: timheuer/base64-to-file@v1.2
               with:
                   fileName: keystore.jks
                   encodedString: ${{ secrets.TV_KEYSTORE_BASE64 }}
-            - name: Create key.properties
+            - name: Create key.properties from secrets
+              if: ${{ secrets.TV_KEYSTORE_BASE64 != '' && secrets.TV_STORE_PASSWORD != '' && secrets.TV_KEY_PASSWORD != '' && secrets.TV_KEY_ALIAS != '' }}
               run: |
                   echo "storeFile=${{ steps.android_tv_keystore.outputs.filePath }}" > simple_live_tv_app/android/key.properties
                   echo "storePassword=${{ secrets.TV_STORE_PASSWORD }}" >> simple_live_tv_app/android/key.properties
                   echo "keyPassword=${{ secrets.TV_KEY_PASSWORD }}" >> simple_live_tv_app/android/key.properties
                   echo "keyAlias=${{ secrets.TV_KEY_ALIAS }}" >> simple_live_tv_app/android/key.properties
+            - name: Create debug key.properties fallback
+              if: ${{ secrets.TV_KEYSTORE_BASE64 == '' || secrets.TV_STORE_PASSWORD == '' || secrets.TV_KEY_PASSWORD == '' || secrets.TV_KEY_ALIAS == '' }}
+              run: |
+                  echo "TV signing secrets not fully configured; using debug keystore fallback."
+                  mkdir -p "$HOME/.android"
+                  if [ ! -f "$HOME/.android/debug.keystore" ]; then
+                      keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" \
+                        -storepass android -alias androiddebugkey -keypass android \
+                        -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+                  fi
+                  cat > simple_live_tv_app/android/key.properties <<EOF
+                  storeFile=$HOME/.android/debug.keystore
+                  storePassword=android
+                  keyAlias=androiddebugkey
+                  keyPassword=android
+                  EOF
 
             # 设置JAVA环境
             - uses: actions/setup-java@v4
