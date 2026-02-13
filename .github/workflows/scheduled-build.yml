@@ -39,6 +39,21 @@ jobs:
         working-directory: simple_live_app
         run: flutter pub get
 
+      - name: Prepare Android debug signing config
+        run: |
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          cat > simple_live_app/android/key.properties <<EOF
+          storeFile=$HOME/.android/debug.keystore
+          storePassword=android
+          keyAlias=androiddebugkey
+          keyPassword=android
+          EOF
+
       - name: Build APK (debug)
         working-directory: simple_live_app
         run: flutter build apk --debug --split-per-abi
